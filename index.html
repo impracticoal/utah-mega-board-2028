@@ -492,9 +492,32 @@ function badge(source) {
   return '<span class="badge">247 only</span>';
 }
 
-let sortKey = "rating";
-let sortDir = -1;
-let activeFilter = "all";
+const STATE_KEY = "utahMegaBoard.viewState";
+
+function loadState() {
+  try {
+    return JSON.parse(localStorage.getItem(STATE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify({
+      sortKey, sortDir, activeFilter,
+      search: document.getElementById("search").value,
+      expandedName,
+    }));
+  } catch {
+    // localStorage unavailable (private browsing, quota, etc.) — persistence is best-effort
+  }
+}
+
+const savedState = loadState();
+let sortKey = savedState.sortKey || "rating";
+let sortDir = savedState.sortDir === 1 ? 1 : -1;
+let activeFilter = savedState.activeFilter || "all";
 
 function isUtahLeading(d) {
   return !!(d.leaders && d.leaders.length && d.leaders[0].pct != null && d.leaders[0].team === "Utah");
@@ -590,7 +613,7 @@ function crystalBallsHtml(d) {
       </div>`).join("") + `</div>`;
 }
 
-let expandedName = null;
+let expandedName = savedState.expandedName || null;
 
 function render() {
   const filtered = sortList(applyFilter(DATA));
@@ -637,6 +660,7 @@ document.getElementById("rows").addEventListener("click", (e) => {
   if (!row) return;
   const name = row.dataset.name;
   expandedName = expandedName === name ? null : name;
+  saveState();
   render();
 });
 document.getElementById("rows").addEventListener("keydown", (e) => {
@@ -646,6 +670,7 @@ document.getElementById("rows").addEventListener("keydown", (e) => {
   e.preventDefault();
   const name = row.dataset.name;
   expandedName = expandedName === name ? null : name;
+  saveState();
   render();
 });
 
@@ -662,9 +687,23 @@ document.querySelectorAll(".filter-btn").forEach(btn => {
     document.querySelectorAll(".filter-btn").forEach(b => b.setAttribute("aria-pressed", "false"));
     btn.setAttribute("aria-pressed", "true");
     activeFilter = btn.dataset.filter;
+    saveState();
     render();
   });
 });
+
+function setSortIndicator(th) {
+  document.querySelectorAll("thead th").forEach(h => {
+    h.classList.remove("active");
+    h.querySelector(".arrow")?.remove();
+  });
+  th.classList.add("active");
+  const arrow = document.createElement("span");
+  arrow.className = "arrow";
+  arrow.textContent = sortDir === 1 ? "▴" : "▾";
+  th.appendChild(document.createTextNode(" "));
+  th.appendChild(arrow);
+}
 
 document.querySelectorAll("thead th[data-sort]").forEach(th => {
   th.addEventListener("click", () => {
@@ -675,22 +714,29 @@ document.querySelectorAll("thead th[data-sort]").forEach(th => {
       sortKey = key;
       sortDir = key === "rating" ? -1 : 1;
     }
-    document.querySelectorAll("thead th").forEach(h => {
-      h.classList.remove("active");
-      h.querySelector(".arrow")?.remove();
-    });
-    th.classList.add("active");
-    const arrow = document.createElement("span");
-    arrow.className = "arrow";
-    arrow.textContent = sortDir === 1 ? "▴" : "▾";
-    th.appendChild(document.createTextNode(" "));
-    th.appendChild(arrow);
+    setSortIndicator(th);
+    saveState();
     render();
   });
 });
 
-document.getElementById("search").addEventListener("input", render);
+document.getElementById("search").addEventListener("input", () => {
+  saveState();
+  render();
+});
 
+function restoreControlsFromState() {
+  if (savedState.search) document.getElementById("search").value = savedState.search;
+  const filterBtn = document.querySelector(`.filter-btn[data-filter="${activeFilter}"]`);
+  if (filterBtn) {
+    document.querySelectorAll(".filter-btn").forEach(b => b.setAttribute("aria-pressed", "false"));
+    filterBtn.setAttribute("aria-pressed", "true");
+  }
+  const sortTh = document.querySelector(`thead th[data-sort="${sortKey}"]`);
+  if (sortTh) setSortIndicator(sortTh);
+}
+
+restoreControlsFromState();
 updateStats();
 render();
 </script>
